@@ -2,7 +2,12 @@
   "name": "codicent",
   "displayName": "codicent",
   "description": "Codicent VSCode extension",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "repository": {
+    "type": "github",
+    "url": "https://github.com/izaxon/vscode-codicent"
+  },
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.65.0"
   },
@@ -20,7 +25,7 @@
         "title": "Codicent: Send selected text to Codicent"
       }
     ],
-	 "keybindings": [
+    "keybindings": [
       {
         "command": "codicent.send",
         "key": "ctrl+shift+c",
