@@ -3,6 +3,7 @@
   "displayName": "codicent",
   "description": "Codicent VSCode extension",
   "version": "1.0.0",
+  "publisher": "izaxon",
   "repository": {
     "type": "github",
     "url": "https://github.com/izaxon/vscode-codicent"
