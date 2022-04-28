@@ -35,3 +35,8 @@ Users appreciate release notes as you update your extension.
 ### 1.0.0
 
 Initial release of the Codicent extension. One feature => send selected text to Codicent.
+
+### 1.0.1
+
+Bugfix: some text segments were not copied correctly to Codicent (e.g. texts including the character #).
+
