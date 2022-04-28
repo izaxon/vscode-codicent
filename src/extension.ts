@@ -1,5 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
+import { basename } from "path";
 import { TextEncoder } from "util";
 import * as vscode from "vscode";
 
@@ -56,8 +57,9 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     //  vscode.window.showInformationMessage(text);
-    vscode.env.openExternal(
-      vscode.Uri.parse(`https://codicent.com/compose?text=${encodeURI(text)}`)
+    vscode.commands.executeCommand(
+      "vscode.open",
+      `https://codicent.com/compose?text=${encodeURIComponent(text)}`
     );
   });
 
