@@ -35,6 +35,41 @@ const getWorkspaceConfig = async (
   }
 };
 
+// Simple JWT decoder (no signature validation)
+const decodeJWT = (token: string): any | null => {
+  try {
+    // JWT has 3 parts: header.payload.signature
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      console.error("JWT: Invalid token format - expected 3 parts");
+      return null;
+    }
+
+    // Decode the payload (second part)
+    const payload = parts[1];
+    // Add padding if needed for base64 decoding
+    const paddedPayload = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    const decodedPayload = Buffer.from(paddedPayload, "base64").toString("utf8");
+
+    const parsedPayload = JSON.parse(decodedPayload);
+    console.log("JWT Payload:", JSON.stringify(parsedPayload, null, 2));
+
+    return parsedPayload;
+  } catch (error) {
+    console.error("JWT: Failed to decode token:", error);
+    return null;
+  }
+};
+
+// Get project name from JWT token
+const getProjectFromToken = (token: string): string | null => {
+  const payload = decodeJWT(token);
+  if (!payload) return null;
+
+  // Check common JWT claims where project name might be stored
+  return payload.project || payload.proj || payload.aud || payload.client_id || null;
+};
+
 // Device authorization flow types
 interface DeviceAuthResponse {
   device_code: string;
@@ -266,19 +301,38 @@ const completeDeviceAuth = async (
 // Get token (with device auth fallback)
 // Get token (with device auth fallback)
 const getCodicentToken = async (): Promise<string | null> => {
+  let token: string | null = null;
+
   // First try environment variable (for backward compatibility)
   if (process.env.CODICENT_API_KEY) {
-    return process.env.CODICENT_API_KEY;
-  }
-
-  // Try to get token from workspace config
-  if (vscode.workspace.workspaceFolders) {
+    token = process.env.CODICENT_API_KEY;
+    console.log("Codicent: Using token from environment variable");
+  } else if (vscode.workspace.workspaceFolders) {
+    // Try to get token from workspace config
     const workspaceFolder = vscode.workspace.workspaceFolders[0];
     const config = await getWorkspaceConfig(workspaceFolder.uri);
     if (config?.accessToken) {
+      token = config.accessToken;
       console.log("Codicent: Using stored access token from workspace config");
-      return config.accessToken;
     }
+  }
+
+  if (token) {
+    // Decode and display JWT contents
+    console.log("=== JWT Token Analysis ===");
+    const payload = decodeJWT(token);
+    if (payload) {
+      const projectName = getProjectFromToken(token);
+      console.log("Extracted project name from token:", projectName);
+
+      // Log expiration if present
+      if (payload.exp) {
+        const expDate = new Date(payload.exp * 1000);
+        console.log("Token expires at:", expDate.toISOString());
+      }
+    }
+    console.log("=== End JWT Analysis ===");
+    return token;
   }
 
   console.log("Codicent: No token found");
@@ -297,29 +351,64 @@ const ensureCodicentToken = async (): Promise<string | null> => {
     }
 
     const workspaceFolder = vscode.workspace.workspaceFolders[0];
-    const config = await getWorkspaceConfig(workspaceFolder.uri);
+    let config = await getWorkspaceConfig(workspaceFolder.uri);
 
-    if (!config?.project) {
-      vscode.window.showErrorMessage(
-        "Configure Codicent project name first using 'Codicent: Configure workspace project'"
-      );
-      return null;
+    // Get project name (from config or prompt user)
+    let projectName = config?.project;
+    if (!projectName) {
+      projectName = await vscode.window.showInputBox({
+        prompt: "Enter Codicent project name for authentication",
+        placeHolder: "e.g., my-project, frontend, api-service",
+        validateInput: (value) => {
+          if (!value || value.trim().length === 0) return "Project name cannot be empty";
+          if (value.includes(" ")) return "Project name should not contain spaces";
+          return null;
+        },
+      });
+
+      if (!projectName?.trim()) {
+        vscode.window.showErrorMessage("Project name is required for authentication");
+        return null;
+      }
+      projectName = projectName.trim();
     }
 
-    const authResult = await completeDeviceAuth(config.project);
+    const authResult = await completeDeviceAuth(projectName);
     if (authResult) {
-      // Save tokens to config
+      // Save tokens to config (including project name if not already saved)
       const updatedConfig = {
-        ...config,
+        project: projectName,
         accessToken: authResult.accessToken,
         refreshToken: authResult.refreshToken,
       };
       await writeConfigFile(workspaceFolder.uri, updatedConfig);
+
+      // Decode and log the new token
+      console.log("=== New JWT Token Analysis ===");
+      const payload = decodeJWT(authResult.accessToken);
+      if (payload) {
+        const tokenProjectName = getProjectFromToken(authResult.accessToken);
+        console.log("Project name from new token:", tokenProjectName);
+        if (tokenProjectName && tokenProjectName !== projectName) {
+          console.log(`NOTE: Token project (${tokenProjectName}) differs from requested project (${projectName})`);
+        }
+      }
+      console.log("=== End New JWT Analysis ===");
+
       token = authResult.accessToken;
     }
   }
 
   return token;
+};
+
+// Get project mention from current token
+const getProjectMention = async (): Promise<string> => {
+  const token = await getCodicentToken();
+  if (!token) return "";
+
+  const projectName = getProjectFromToken(token);
+  return projectName ? `@${projectName} ` : "";
 };
 
 const showCodicentResponse = (content: string, title: string = "Codicent Response") => {
@@ -685,12 +774,8 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    // Project mention
-    let projectMention = "";
-    if (vscode.workspace.workspaceFolders) {
-      const config = await getWorkspaceConfig(vscode.workspace.workspaceFolders[0].uri);
-      if (config?.project) projectMention = `@${config.project} `;
-    }
+    // Get project mention from JWT token
+    const projectMention = await getProjectMention();
 
     // Context
     const fileName = basename(editor.document.fileName);
@@ -717,11 +802,8 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    let projectMention = "";
-    if (vscode.workspace.workspaceFolders) {
-      const config = await getWorkspaceConfig(vscode.workspace.workspaceFolders[0].uri);
-      if (config?.project) projectMention = `@${config.project} `;
-    }
+    // Get project mention from JWT token
+    const projectMention = await getProjectMention();
 
     const fileName = basename(editor.document.fileName);
     const lineNumber = selection.start.line + 1;
