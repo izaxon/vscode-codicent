@@ -10,13 +10,10 @@
   },
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.65.0"
+    "vscode": "^1.96.0"
   },
   "categories": [
     "Other"
-  ],
-  "activationEvents": [
-    "onCommand:codicent.send"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -24,6 +21,14 @@
       {
         "command": "codicent.send",
         "title": "Codicent: Send selected text to Codicent"
+      },
+      {
+        "command": "codicent.configure",
+        "title": "Codicent: Configure workspace project"
+      },
+      {
+        "command": "codicent.sendToMcp",
+        "title": "Codicent: Send to MCP (with response view)"
       }
     ],
     "keybindings": [
@@ -31,6 +36,12 @@
         "command": "codicent.send",
         "key": "ctrl+shift+c",
         "mac": "shift+cmd+c"
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codicentMcpProvider",
+        "label": "Codicent MCP"
       }
     ]
   },
@@ -43,7 +54,7 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.65.0",
+    "@types/vscode": "^1.96.0",
     "@types/glob": "^7.2.0",
     "@types/mocha": "^9.1.0",
     "@types/node": "14.x",
