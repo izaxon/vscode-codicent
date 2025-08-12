@@ -23,10 +23,6 @@
         "title": "Codicent: Send selected text to Codicent"
       },
       {
-        "command": "codicent.configure",
-        "title": "Codicent: Configure workspace project"
-      },
-      {
         "command": "codicent.authenticate",
         "title": "Codicent: Authenticate with device flow"
       },
