@@ -23,14 +23,23 @@ const getWorkspaceConfig = async (
 ): Promise<{ project: string; accessToken?: string; refreshToken?: string } | null> => {
   const configPath = vscode.Uri.joinPath(folderPath, ".vscode", "codicent.json");
   try {
+    console.log("Codicent: Reading config from:", configPath.fsPath);
     const configData = await vscode.workspace.fs.readFile(configPath);
-    const config = JSON.parse(configData.toString()) as {
+    const configContent = configData.toString();
+    console.log("Codicent: Raw config file content:", configContent);
+    if (configContent.trim() === "") {
+      console.log("Codicent: Config file is empty, treating as null.");
+      return null;
+    }
+    const config = JSON.parse(configContent) as {
       project: string;
       accessToken?: string;
       refreshToken?: string;
     };
+    console.log("Codicent: Parsed config:", { project: config.project, hasToken: !!config.accessToken });
     return config;
-  } catch {
+  } catch (error) {
+    console.error("Codicent: Failed to get/parse workspace config:", error);
     return null;
   }
 };
@@ -298,26 +307,40 @@ const completeDeviceAuth = async (
   }
 };
 
-// Get token (with device auth fallback)
-// Get token (with device auth fallback)
-const getCodicentToken = async (): Promise<string | null> => {
+// Get token from workspace config only (OAuth device flow)
+const getCodicentToken = async (forceRefresh: boolean = false): Promise<string | null> => {
   let token: string | null = null;
 
-  // First try environment variable (for backward compatibility)
-  if (process.env.CODICENT_API_KEY) {
-    token = process.env.CODICENT_API_KEY;
-    console.log("Codicent: Using token from environment variable");
-  } else if (vscode.workspace.workspaceFolders) {
-    // Try to get token from workspace config
+  if (vscode.workspace.workspaceFolders) {
+    // Get token from workspace config
     const workspaceFolder = vscode.workspace.workspaceFolders[0];
+    console.log(`Codicent: Reading workspace config from ${workspaceFolder.uri.fsPath}/.vscode/codicent.json`);
     const config = await getWorkspaceConfig(workspaceFolder.uri);
+
     if (config?.accessToken) {
-      token = config.accessToken;
-      console.log("Codicent: Using stored access token from workspace config");
+      console.log("Codicent: Found access token in workspace config");
+
+      // Skip placeholder tokens from workspace config
+      if (
+        config.accessToken === "your_actual_api_key_here" ||
+        config.accessToken === "placeholder" ||
+        config.accessToken.includes("placeholder")
+      ) {
+        console.log("Codicent: Ignoring placeholder token from workspace config");
+        token = null;
+      } else {
+        token = config.accessToken;
+        console.log("Codicent: Using stored access token from workspace config");
+      }
+    } else {
+      console.log("Codicent: No access token in workspace config");
     }
+  } else {
+    console.log("Codicent: No workspace folders available");
   }
 
   if (token) {
+    console.log("Codicent: Valid token found in workspace config");
     // Decode and display JWT contents
     console.log("=== JWT Token Analysis ===");
     const payload = decodeJWT(token);
@@ -383,6 +406,9 @@ const ensureCodicentToken = async (): Promise<string | null> => {
       };
       await writeConfigFile(workspaceFolder.uri, updatedConfig);
 
+      // Add a small delay to ensure file write is complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Decode and log the new token
       console.log("=== New JWT Token Analysis ===");
       const payload = decodeJWT(authResult.accessToken);
@@ -396,6 +422,17 @@ const ensureCodicentToken = async (): Promise<string | null> => {
       console.log("=== End New JWT Analysis ===");
 
       token = authResult.accessToken;
+
+      // Verify we can read back the token immediately
+      console.log("Codicent: Verifying token was saved correctly...");
+      const verifyToken = await getCodicentToken(true);
+      if (!verifyToken) {
+        console.error("Codicent: WARNING - Token was not readable immediately after saving!");
+      } else if (verifyToken !== token) {
+        console.error("Codicent: WARNING - Token read back doesn't match saved token!");
+      } else {
+        console.log("Codicent: ✓ Token verification successful");
+      }
     }
   }
 
@@ -404,10 +441,15 @@ const ensureCodicentToken = async (): Promise<string | null> => {
 
 // Get project mention from current token
 const getProjectMention = async (): Promise<string> => {
-  const token = await getCodicentToken();
-  if (!token) return "";
+  console.log("Codicent: Getting project mention from token...");
+  const token = await getCodicentToken(true); // Force refresh
+  if (!token) {
+    console.log("Codicent: No token available for project mention");
+    return "";
+  }
 
   const projectName = getProjectFromToken(token);
+  console.log("Codicent: Extracted project name for mention:", projectName);
   return projectName ? `@${projectName} ` : "";
 };
 
@@ -759,6 +801,30 @@ export function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(authenticateDisposable);
 
+  // Clear tokens command (for troubleshooting placeholder tokens)
+  const clearTokensDisposable = vscode.commands.registerCommand("codicent.clearTokens", async () => {
+    if (!vscode.workspace.workspaceFolders) {
+      vscode.window.showErrorMessage("No workspace folder is open.");
+      return;
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders[0];
+    const config = await getWorkspaceConfig(workspaceFolder.uri);
+
+    if (config) {
+      // Clear tokens but keep project name
+      const clearedConfig = {
+        project: config.project,
+        // Remove accessToken and refreshToken
+      };
+      await writeConfigFile(workspaceFolder.uri, clearedConfig);
+      vscode.window.showInformationMessage("✅ Cleared all tokens. Use 'Codicent: Authenticate' to sign in again.");
+    } else {
+      vscode.window.showInformationMessage("No config file found to clear.");
+    }
+  });
+  context.subscriptions.push(clearTokensDisposable);
+
   // Direct MCP command (uses selection)
   const sendToMcpDisposable = vscode.commands.registerCommand("codicent.sendToMcp", async () => {
     const editor = vscode.window.activeTextEditor;
@@ -842,10 +908,6 @@ export function activate(context: vscode.ExtensionContext) {
       console.log("Token length:", token.length);
       console.log("Token starts with:", token.substring(0, 8) + "...");
     }
-
-    // Check environment variable (legacy)
-    const envToken = process.env.CODICENT_API_KEY;
-    console.log("Environment CODICENT_API_KEY present:", !!envToken);
 
     // Test MCP server availability
     console.log("Testing MCP server status endpoint...");
