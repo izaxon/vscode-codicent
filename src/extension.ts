@@ -89,10 +89,10 @@ interface DeviceAuthResponse {
 }
 
 interface TokenResponse {
-  access_token: string;
-  refresh_token?: string;
-  token_type: string;
-  expires_in: number;
+  accessToken: string;
+  refreshToken?: string | null;
+  tokenType: string;
+  expiresIn: number;
 }
 
 // Start device authorization flow
@@ -187,6 +187,12 @@ const pollForToken = async (deviceCode: string, interval: number): Promise<Token
           try {
             const response = JSON.parse(data) as TokenResponse;
             console.log("Token Poll: Success! Got tokens");
+            // Add a check to ensure the accessToken exists
+            if (!response.accessToken) {
+              console.error("Token Poll: Response is successful but missing accessToken.");
+              resolve(null);
+              return;
+            }
             resolve(response);
           } catch (error) {
             console.error("Token Poll: Failed to parse response:", error);
@@ -215,6 +221,9 @@ const pollForToken = async (deviceCode: string, interval: number): Promise<Token
             ) {
               console.log("Token Poll: Authorization still pending, continue polling");
               resolve(null); // Continue polling
+            } else if (errorResponse.error === "invalid_grant") {
+              console.error("Token Poll: Invalid grant. The device code is likely expired or used. Stopping poll.");
+              resolve(null); // Stop polling
             } else {
               console.error("Token Poll: Authorization failed or other error:", errorResponse);
               resolve(null); // Stop polling - this is likely a permanent error
@@ -293,8 +302,8 @@ const completeDeviceAuth = async (
           clearInterval(pollInterval);
           vscode.window.showInformationMessage("✅ Successfully authorized with Codicent!");
           resolve({
-            accessToken: tokenResponse.access_token,
-            refreshToken: tokenResponse.refresh_token,
+            accessToken: tokenResponse.accessToken,
+            refreshToken: tokenResponse.refreshToken ?? undefined,
           });
         }
         // If null, continue polling
@@ -397,12 +406,12 @@ const ensureCodicentToken = async (): Promise<string | null> => {
     }
 
     const authResult = await completeDeviceAuth(projectName);
-    if (authResult) {
+    if (authResult && authResult.accessToken) {
       // Save tokens to config (including project name if not already saved)
       const updatedConfig = {
         project: projectName,
         accessToken: authResult.accessToken,
-        refreshToken: authResult.refreshToken,
+        refreshToken: authResult.refreshToken ?? undefined,
       };
       await writeConfigFile(workspaceFolder.uri, updatedConfig);
 
@@ -433,6 +442,8 @@ const ensureCodicentToken = async (): Promise<string | null> => {
       } else {
         console.log("Codicent: ✓ Token verification successful");
       }
+    } else {
+      console.error("Codicent: Authentication completed, but no valid token was returned.");
     }
   }
 
@@ -846,7 +857,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Context
     const fileName = basename(editor.document.fileName);
     const lineNumber = selection.start.line + 1;
-    const contextualText = `${projectMention}From ${fileName}:${lineNumber}\n\n${text}`;
+    const contextualText = `@${projectMention}\n${text}`;
 
     const success = await postToCodicentDirectly(contextualText);
     if (success) showCodicentResponse(contextualText, "Message Sent to Codicent");
