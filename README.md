@@ -40,3 +40,6 @@ Initial release of the Codicent extension. One feature => send selected text to 
 
 Bugfix: some text segments were not copied correctly to Codicent (e.g. texts including the character #).
 
+### 1.0.2
+
+Codicent MCP Server support and device authentication flow implemented.

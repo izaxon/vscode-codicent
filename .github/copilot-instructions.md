@@ -98,3 +98,39 @@ if (!editor) {
    - Local stdio server (inactive) in `mcpServer.ts`
 3. `activationEvents` are auto-generated from package.json contributions - don't manually specify
 4. The `writeConfigFile` function is TODO - currently unused workspace configuration feature
+
+
+## Publishing the Extension
+
+To publish this extension to the Visual Studio Code Marketplace:
+
+1. **Install vsce (Visual Studio Code Extension Manager):**
+   ```cmd
+   npm install -g vsce
+   ```
+
+2. **Create or use a publisher:**
+   - Go to https://marketplace.visualstudio.com/manage to create or manage your publisher.
+   - Make sure your account has "Owner" or "Contributor" rights for the publisher.
+
+3. **Create a Personal Access Token (PAT):**
+   - Go to https://aka.ms/vscodepat
+   - Create a PAT with "Marketplace (read & manage)" and "Packaging (read & manage)" permissions.
+
+4. **Login to vsce:**
+   ```cmd
+   vsce login <publisher-name>
+   ```
+   Enter your PAT when prompted.
+
+5. **Package the extension:**
+   ```cmd
+   vsce package
+   ```
+
+6. **Publish the extension:**
+   ```cmd
+   vsce publish
+   ```
+
+For more details, see the [VSCE documentation](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
