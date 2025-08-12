@@ -53,6 +53,10 @@
       }
     ]
   },
+  "activationEvents": [
+    "onCommand:codicent.send",
+    "onCommand:codicent.configure"
+  ],
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
