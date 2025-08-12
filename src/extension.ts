@@ -584,6 +584,7 @@ const postToCodicentDirectly = async (content: string): Promise<boolean> => {
         name: "PostMessage",
         arguments: {
           message: content,
+          apiKey: token,
         },
       },
     };
@@ -613,8 +614,22 @@ const postToCodicentDirectly = async (content: string): Promise<boolean> => {
 
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try {
-              // Parse MCP response
-              const mcpResponse = JSON.parse(data);
+              // Parse MCP response, which may be in an SSE (Server-Sent Events) format.
+              let jsonString = "";
+              const lines = data.trim().split("\n");
+              for (const line of lines) {
+                if (line.startsWith("data:")) {
+                  jsonString = line.substring(5).trim();
+                  break; // Found the data line
+                }
+              }
+
+              // If no 'data:' line was found, the whole response might be JSON (e.g., an error).
+              if (!jsonString) {
+                jsonString = data;
+              }
+
+              const mcpResponse = JSON.parse(jsonString);
               console.log("Codicent: Parsed MCP response:", mcpResponse);
 
               if (mcpResponse.error) {
@@ -882,9 +897,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Get project mention from JWT token
     const projectMention = await getProjectMention();
 
-    const fileName = basename(editor.document.fileName);
-    const lineNumber = selection.start.line + 1;
-    const contextualText = `${projectMention}From ${fileName}:${lineNumber}\n\n${text}`;
+    // const fileName = basename(editor.document.fileName);
+    // const lineNumber = selection.start.line + 1;
+    const contextualText = `${projectMention}\n${text}`;
 
     const success = await postToCodicentDirectly(contextualText);
     if (!success) {
