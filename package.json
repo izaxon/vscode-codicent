@@ -1,7 +1,7 @@
 {
   "name": "codicent",
   "displayName": "codicent",
-  "description": "Codicent VSCode extension",
+  "description": "Send selected text to Codicent via HTTP and MCP integration with workspace project context",
   "version": "1.0.1",
   "publisher": "izaxon",
   "repository": {
@@ -27,8 +27,16 @@
         "title": "Codicent: Configure workspace project"
       },
       {
+        "command": "codicent.authenticate",
+        "title": "Codicent: Authenticate with device flow"
+      },
+      {
         "command": "codicent.sendToMcp",
         "title": "Codicent: Send to MCP (with response view)"
+      },
+      {
+        "command": "codicent.debugMcp",
+        "title": "Codicent: Debug MCP Connection"
       }
     ],
     "keybindings": [
