@@ -96,11 +96,13 @@ interface TokenResponse {
 }
 
 // Start device authorization flow
-const startDeviceAuth = async (projectName: string): Promise<DeviceAuthResponse | null> => {
+const startDeviceAuth = async (projectName?: string): Promise<DeviceAuthResponse | null> => {
   return new Promise((resolve) => {
     const https = require("https");
 
-    const postData = `ClientId=cli-app&Scope=api&Project=${encodeURIComponent(projectName)}`;
+    // Make project parameter optional - if not provided, omit it from the request
+    const projectParam = projectName ? `&Project=${encodeURIComponent(projectName)}` : "";
+    const postData = `ClientId=cli-app&Scope=api${projectParam}`;
 
     const options = {
       hostname: "codicent.com",
@@ -251,7 +253,7 @@ const pollForToken = async (deviceCode: string, interval: number): Promise<Token
 
 // Complete device authorization flow
 const completeDeviceAuth = async (
-  projectName: string
+  projectName?: string
 ): Promise<{ accessToken: string; refreshToken?: string } | null> => {
   try {
     // Step 1: Start device authorization
@@ -636,7 +638,7 @@ const initializeWorkspace = async () => {
   const existingConfig = await getWorkspaceConfig(workspaceFolder.uri);
   if (!existingConfig) {
     console.log(
-      `Codicent: Workspace '${workspaceFolder.name}' is not configured. Use 'Codicent: Configure workspace project' to set it up.`
+      `Codicent: Workspace '${workspaceFolder.name}' is not configured. Use 'Codicent: Authenticate' to set it up.`
     );
     return null;
   }
@@ -704,41 +706,27 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    // Since we get project from token, we don't need to read it from config first.
-    // We can just prompt for it if it's the very first time.
     const workspaceFolder = vscode.workspace.workspaceFolders[0];
-    const config = await getWorkspaceConfig(workspaceFolder.uri);
-    let projectName = config?.project;
 
-    if (!projectName) {
-      projectName = await vscode.window.showInputBox({
-        prompt: "Enter Codicent project name for first-time authentication",
-        placeHolder: "e.g., my-project, frontend, api-service",
-        validateInput: (value) => {
-          if (!value || value.trim().length === 0) return "Project name cannot be empty";
-          if (value.includes(" ")) return "Project name should not contain spaces";
-          return null;
-        },
-      });
+    vscode.window.showInformationMessage("Starting Codicent device authorization...");
 
-      if (!projectName?.trim()) {
-        vscode.window.showErrorMessage("Project name is required for authentication");
-        return;
-      }
-      projectName = projectName.trim();
-    }
-
-    vscode.window.showInformationMessage(`Starting Codicent device authorization for project: ${projectName}...`);
-
-    const authResult = await completeDeviceAuth(projectName);
+    // Start device auth without requiring project name
+    const authResult = await completeDeviceAuth();
     if (authResult) {
+      // Extract project name from the JWT token
+      const projectFromToken = getProjectFromToken(authResult.accessToken);
+      
+      if (!projectFromToken) {
+        vscode.window.showWarningMessage("⚠️ Could not extract project name from token. Using default 'unknown-project'");
+      }
+
       const updatedConfig = {
-        project: projectName, // Save the project name used for auth
+        project: projectFromToken || "unknown-project", // Use project name from token
         accessToken: authResult.accessToken,
         refreshToken: authResult.refreshToken,
       };
       await writeConfigFile(workspaceFolder.uri, updatedConfig);
-      vscode.window.showInformationMessage("✅ Successfully authenticated with Codicent!");
+      vscode.window.showInformationMessage(`✅ Successfully authenticated with Codicent! Project: ${updatedConfig.project}`);
     } else {
       vscode.window.showErrorMessage("❌ Codicent authentication failed");
     }

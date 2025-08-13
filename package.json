@@ -55,7 +55,7 @@
   },
   "activationEvents": [
     "onCommand:codicent.send",
-    "onCommand:codicent.configure"
+    "onCommand:codicent.authenticate"
   ],
   "scripts": {
     "vscode:prepublish": "npm run compile",
