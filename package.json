@@ -2,7 +2,7 @@
   "name": "codicent",
   "displayName": "codicent",
   "description": "Send selected text to Codicent via HTTP and Codicent MCP access",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "izaxon",
   "repository": {
     "type": "github",

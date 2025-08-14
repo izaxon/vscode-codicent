@@ -43,3 +43,8 @@ Bugfix: some text segments were not copied correctly to Codicent (e.g. texts inc
 ### 1.0.2
 
 Codicent MCP Server support and device authentication flow implemented.
+
+### 1.0.3
+
+Improved Codicent auth flow.
+ 
